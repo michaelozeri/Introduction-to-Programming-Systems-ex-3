@@ -18,5 +18,31 @@
     <ClCompile Include="main.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Extensions.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Command_Thread.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ThreadManager.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Parallel.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Extensions.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Command_Thread.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ThreadManager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Parallel.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

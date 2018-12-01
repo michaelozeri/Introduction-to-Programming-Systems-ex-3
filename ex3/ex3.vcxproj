@@ -115,7 +115,17 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Command_Thread.c" />
+    <ClCompile Include="Extensions.c" />
     <ClCompile Include="main.c" />
+    <ClCompile Include="Parallel.c" />
+    <ClCompile Include="ThreadManager.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Command_Thread.h" />
+    <ClInclude Include="Extensions.h" />
+    <ClInclude Include="Parallel.h" />
+    <ClInclude Include="ThreadManager.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
