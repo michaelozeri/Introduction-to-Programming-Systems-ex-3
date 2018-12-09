@@ -4,7 +4,9 @@
 #include <windows.h>
 #include <stdio.h>
 #include <stdbool.h>
-#include <string.h>
+#include "Parallel.h"
+#include "ThreadManager.h"
+#include "Extensions.h"
 /* Constants */
 
 /* Struct Declerations */
@@ -20,21 +22,24 @@ typedef struct ResultFile {
 	int TotalSize;
 } ResultFile;
 
-/* COMMAND_THREAD_params_t is a struct representing the params given to a command thread
+/* ThreadParams is a struct representing the params given to a command thread
 *	Members:
 *			Command- the command to run by the process of the thread
 *			ResultsPath - the path to the output file created by the process
 *			ExpectedResultPath- the path to the expected results file to compare with the actual output file created by the processs
 *			ReturnCode - the code returned by the thread.
 */
-typedef struct COMMAND_THREAD_params_t
+typedef struct ThreadParams
 {
 	int maxNumber;
 	int outputBufferSize;
 	DWORD ReturnCode;
 	void* ptrToAnchorArray;
-	void* ptrToOutputBufferArray
-} COMMAND_THREAD_params_t;
+	void* ptrToOutputBufferArray;
+	Semaphore* ptrToSemaphore;
+	int* calcFinished;
+	char* filePath;
+} ThreadParams;
 
 /* Thread is a struct representing a new thread
 *	Members:
@@ -52,18 +57,21 @@ typedef struct Thread {
 	DWORD ExitCode;
 	BOOL ReturnValue;
 	LPTHREAD_START_ROUTINE Function;
-	COMMAND_THREAD_params_t *p_thread_params;
+	ThreadParams *threadParams;
 } Thread;
 
 /*
 * this is the struct that represents a value to insert into the output_buffer
 */
-typedef struct bufferValue {
+typedef struct BufferValue {
 	int a;
 	int b;
 	int c;
+	int n;
+	int m;
 	int aquired;
-}bufferValue;
+	Mutex* mutex;
+}BufferValue;
 
 /* Functions Declerations */
 /* FreeResultsObject will free all allocated resources in ResultFile Struct
@@ -83,58 +91,11 @@ void FreeResultsObject(ResultFile* result);
 */
 void FreeStringArray(char** arr, int numOfMembers);
 
-
-/* CompareResultsFiles will compare two text file contents
-* Arguments:
-*		expectedResultPath - string, representing the path to the expected results file
-*		resultsPath - string, representing the path to the actual results file
-* Returns:
-*		SUCCESS if the files are identical
-*		CRASHED if we ran into an unrecoverable error
-*		FAILURE if the files were compared succesfully and found unidentical
-*/
-int CompareResultsFiles(char* expectedResultPath, char* resultsPath);
-
-/* ReadFileContents will read a file and returns it's contents
-* Arguments:
-*		path - string, representing the path to file to read
-* Returns:
-*		ResultFile representing the read file
-*/
-ResultFile *ReadFileContents(char *path);
-
 /* GetThreadFromLine will return a thread struct object from a test file line
 * Returns:
 *		Thread struct representing the new thread
 */
-Thread* InitNewThread();
-
-/*
-this function gets an exit code from the thread and returns a string representation
-to be written to the log file
-Params: exitCode - the code to be translated from int to string
-return: the string representation if success else NULL is returned
-*/
-char* TranslateExitCode(Thread* thread);
-
-//converts extension to txt in the end
-char* ConverExeExtensionToTxt(char *orig, char *rep, char *with);
-
-/*
-this function splits line of test from the input file into the required arguments
-parameters: str - the line to split into arguments
-returns: an array of string that each one represents the arguments inserted
-*/
-char** SplitLineArguments(const char *str);
-
-/*
-splits the string given by str into sub strings by delimiter c
-Parameters:
-str - the string to split
-c- the delimiter to split by
-arr - the array of strings to store the sub strings splitted
-*/
-int SplitLine(const char *str, char c, char*** arr);
+Thread* initNewThread(BufferValue** bufferValue, Mutex** mutexAnchorArray, Semaphore** bufferQueueSemaphore, int maxNumber, int outputBufferSize);
 
 /*
 this function creates the threads stored in allThreads then waits for them to finish and prints results into the file
@@ -166,11 +127,20 @@ Returns: 0 on success else -1;
 */
 int FreeThreadArray(Thread** arr, int numOfMembers);
 
+int createAndValidateSortThread(Thread** sortThread, BufferValue** bufferValue, Mutex** mutexAnchorArray, Semaphore** bufferQueueSemaphore, int maxNumber, int outputBufferSize, int* calcfinished,char* outputFilePath);
 
-int createAndValidateSortThread(Thread** sortThread);
+int RunCalLogic(ThreadParams* p_params);
 
+void calcNMAndWriteToSemaphore(int n, int maxNumber, Semaphore * semaphore, BufferValue * bufferArray, int outputBufferSize);
 
-int RunCalLogic(COMMAND_THREAD_params_t* p_params);
+void setValueToBufferValue(BufferValue * bufferArray, int place, int a, int b, int c, int n, int m);
 
+int findGCD(int n1, int n2);
 
+int RunLogicSortThread(ThreadParams* params);
 
+int compareBufferValues(const void * elem1, const void * elem2);
+
+BufferValue* readValueFromOutputBufferAndUpSemaphore(Semaphore* semaphore, BufferValue* bufferArray, int outputBufferSize, int* outputBufferEmpty);
+
+int printResults(char* filePath, BufferValue* bufferArray, int outputBufferSize);

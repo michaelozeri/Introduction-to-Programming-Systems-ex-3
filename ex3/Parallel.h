@@ -3,18 +3,17 @@
 #include <windows.h>
 #include <stdio.h>
 #include <stdbool.h>
-#include <string.h>
+
+#define SEMAPHORE_INITIAL_VALUE 1
+#define SEMAPHORE_MAX_VALUE 1
 
 typedef struct Mutex {
 	HANDLE handle;
-
-	char* Command;
-	char* ResultsPath;
-	char* ExpectedResultPath;
-	DWORD ReturnCode;
-	bool isCrashed;
-	void* ptrToAnchorArray;
-	void* ptrToOutputBufferArray;
 }Mutex;
+
+
+typedef struct Semaphore {
+	HANDLE handle;
+}Semaphore;
 
 

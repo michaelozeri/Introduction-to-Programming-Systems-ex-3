@@ -1,10 +1,11 @@
 #pragma once
 /* Includes */
 #include "Command_Thread.h"
+#include "Extensions.h"
 
 
 DWORD WINAPI CalculationThreadFunc(LPVOID lpParam) {
-	COMMAND_THREAD_params_t* p_params;
+	ThreadParams* params;
 
 	/* Check if lpParam is NULL */
 	if (NULL == lpParam) {
@@ -12,20 +13,20 @@ DWORD WINAPI CalculationThreadFunc(LPVOID lpParam) {
 		return -1;
 	}
 
-	p_params = (COMMAND_THREAD_params_t *)lpParam;
-	RunCalLogic(p_params);
-	return p_params->ReturnCode;
+	params = (ThreadParams *)lpParam;
+	RunCalLogic(params);
+	return params->ReturnCode;
 }
 
 DWORD WINAPI sortThreadFunc(LPVOID lpParam)
 {
-	COMMAND_THREAD_params_t* p_params;
+	ThreadParams* threadParams;
 	/* Check if lpParam is NULL */
 	if (NULL == lpParam) {
 		printf("Did not recieve thread params\n");
 		return -1;
 	}
-	p_params = (COMMAND_THREAD_params_t *)lpParam;
-	//TODO: implement and run logic of sort thread
+	threadParams = (ThreadParams *)lpParam;
+	RunLogicSortThread(threadParams);
 	return 0;
 }

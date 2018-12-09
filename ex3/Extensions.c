@@ -1,11 +1,6 @@
 /* Includes */
 #include "Extensions.h"
 
-void FreeProcessObject(Process* process) {
-	free(process->ExitCode);
-	free(process->ProcessInformation);
-	free(process);
-}
 
 void FreeResultsObject(ResultFile* result) {
 	FreeStringArray(result->Results, result->NumberOfElements);
@@ -25,9 +20,6 @@ int FreeThread(Thread* thread) {
 		returnCode = -1;
 	}
 	free(thread->Id);
-	free(thread->p_thread_params->Command);
-	free(thread->p_thread_params->ExpectedResultPath);
-	free(thread->p_thread_params->ResultsPath);
 	free(thread);
 	return returnCode;
 }
@@ -42,163 +34,120 @@ int FreeThreadArray(Thread** arr, int numOfMembers) {
 	return code;
 }
 
-int createAndValidateSortThread(Thread** sortThread)
+int createAndValidateSortThread(Thread** sortThread, BufferValue ** bufferValue, Mutex ** mutexAnchorArray, Semaphore ** bufferQueueSemaphore, int maxNumber, int outputBufferSize,int* calcfinished,char* outputFilePath)
 {
-	(*sortThread) = InitNewThread();
+	(*sortThread) = initNewThread(bufferValue, mutexAnchorArray, bufferQueueSemaphore, maxNumber, outputBufferSize);
+	*((*sortThread)->threadParams->calcFinished) = *calcfinished;
 	//system call
 	(*sortThread)->Handle = CreateThread(
 		NULL,
 		0,
 		(*sortThread)->Function,
-		(*sortThread)->p_thread_params,
+		(*sortThread)->threadParams,
 		0,
 		(*sortThread)->Id);
 	if ((*sortThread)->Handle == NULL) {
-		printf("Error when creating thread\n");
+		printf("ERROR: when creating thread\n");
 		//FreeThreadArray(allThreads, i);
 		return -1;
 	}
+	return 0;
 }
 
-int RunCalLogic(COMMAND_THREAD_params_t * p_params)
+int RunCalLogic(ThreadParams * threadParams)
 {
-	int maxNumber = p_params->maxNumber;
-	int currentNumber = 0;
-	while (currentNumber < maxNumber) {
+	int maxNumber = threadParams->maxNumber;
+	Mutex* anchorArray = threadParams->ptrToAnchorArray;
+	int outputBufferSize = threadParams->outputBufferSize;
+	BufferValue* bufferArray = threadParams->ptrToAnchorArray;
+	Semaphore* semaphore = threadParams->ptrToSemaphore;
+
+	for (int i = 0; i < maxNumber; i++) {
 		//try to aquire anchor
+		if (WaitForSingleObject(anchorArray[i].handle, 0) != WAIT_OBJECT_0) {
+			continue;
+		}
+		int n = i + 1;
+		int a, b, c;
 
-		//calculateNumber
-		//try to aquire semaphore
-		//write to sortArray
-		currentNumber++;
+		calcNMAndWriteToSemaphore(n, maxNumber, semaphore, bufferArray, outputBufferSize);
+
+		//release mutex
+		ReleaseMutex(anchorArray[i].handle);
 	}
+
 	return 0;
 }
 
-int CompareResultsFiles(char* expectedResultPath, char* resultsPath) {
-	ResultFile* expectedResults = ReadFileContents(expectedResultPath);
-	int i;
-	if (expectedResults == NULL) {
-		printf("Couldnt read expected results path");
-		return -1;
-	}
-
-	ResultFile* results = ReadFileContents(resultsPath);
-	if (results == NULL) {
-		printf("Couldnt read results path");
-		FreeResultsObject(expectedResults);
-		return -1;
-	}
-
-	if (expectedResults->NumberOfElements != results->NumberOfElements) {
-		FreeResultsObject(expectedResults);
-		FreeResultsObject(results);
-		return -2;
-	}
-
-	for (i = 0; i < expectedResults->NumberOfElements; i++) {
-		if (strcmp(expectedResults->Results[i], results->Results[i]) != 0) {
-			FreeResultsObject(results);
-			return -2;
-		}
-	}
-
-	FreeResultsObject(results);
-	return 0;
-}
-
-ResultFile* ReadFileContents(char *path) {
-	int diff = 1;
-	char **output = (char**)malloc(1 * sizeof(char*));
-	if (output == NULL)
-	{
-		printf("Memory allocation failed.\n");
-		return NULL;
-	}
-
-	int i = 0;
-	size_t currentSize = 4;
-	errno_t retval;
-	FILE *p_stream;
-	char p_line[100] = { 0 };
-	char *p_ret_str;
-	// Open file
-	retval = fopen_s(&p_stream, path, "r");
-	if (0 != retval) {
-		printf("Failed to open file.\n");
-		free(output);
-		return NULL;
-	}
-
-	// Read lines
-	p_ret_str = fgets(p_line, 100, p_stream);
-	while (NULL != p_ret_str) {
-		// Allocated memory for current line
-		output[i] = (char*)malloc(100 * sizeof(char));
-		if (output[i] == NULL) {
-			printf("Memory allocation failed.\n");
-			FreeStringArray(output, i);
-			return NULL;
-		}
-
-		snprintf(output[i], strlen(p_line) + 1, p_line);
-		p_ret_str = fgets(p_line, 100, p_stream);
-		i++;
-		if (i * sizeof(char*) >= currentSize) {
-			currentSize *= 2;
-			// Need to allocate more memory
-			output = (char**)realloc(output, currentSize);
-			if (output == NULL) {
-				printf("Memory allocation failed.\n");
-				FreeStringArray(output, i);
-				return NULL;
+void calcNMAndWriteToSemaphore(int n, int maxNumber, Semaphore * semaphore, BufferValue * bufferArray, int outputBufferSize)
+{
+	for (int m = n + 1; m < maxNumber; m += 2) {
+		int a, b, c;
+		if (findGCD(n, m) == 1) { //has no common denumerator
+			a = (m*m) - (n*n);
+			b = 2 * m * n;
+			c = (m*m) + (n*n);
+			//try to aquire semaphore
+			if (WaitForSingleObject(semaphore->handle, INFINITE) == WAIT_OBJECT_0) {
+				//write to sortArray
+				int written = 0;
+				int location = 0;
+				while (!written) {
+					int place = location % 3;
+					WaitForSingleObject(bufferArray[place].mutex->handle, 0);
+					if (bufferArray[place].aquired == 0) {
+						setValueToBufferValue(bufferArray, place, a, b, c, n, m);
+						written = 1;
+					}
+					ReleaseMutex(bufferArray[place].mutex->handle);
+					location++;
+				}
+				ReleaseSemaphore(semaphore->handle, 1, NULL); //TODO: check return value?
 			}
 		}
 	}
-
-	if (i * sizeof(char*) < currentSize) {
-		// We have empty allocated memory
-		output = (char**)realloc(output, i * sizeof(char*));
-		if (output == NULL) {
-			printf("Memory allocation failed.\n");
-			FreeStringArray(output, i);
-			return NULL;
-		}
-	}
-	ResultFile* results = (ResultFile*)malloc(sizeof(ResultFile));
-	if (results == NULL) {
-		printf("Memory allocation failed.\n");
-		FreeStringArray(output, i);
-		return NULL;
-	}
-
-	results->Results = output;
-	results->NumberOfElements = i;
-	results->TotalSize = i * sizeof(char*);
-	// Close file
-	retval = fclose(p_stream);
-	if (0 != retval) {
-		printf("Failed to close file.\n");
-		FreeResultsObject(results);
-		return NULL;
-	}
-
-	return results;
 }
 
-Thread* InitNewThread() {
+void setValueToBufferValue(BufferValue * bufferArray, int place, int a, int b, int c, int n, int m)
+{
+	bufferArray[place].a = a;
+	bufferArray[place].b = b;
+	bufferArray[place].c = c;
+	bufferArray[place].n = n;
+	bufferArray[place].m = m;
+}
+
+int findGCD(int n1, int n2) {
+	int  i, gcd;
+	for (i = 1; i <= n1 && i <= n2; ++i)
+	{
+		if (n1%i == 0 && n2%i == 0)
+			gcd = i;
+	}
+	return gcd;
+}
+
+Thread * initNewThread(BufferValue ** bufferValue, Mutex ** mutexAnchorArray, Semaphore ** bufferQueueSemaphore, int maxNumber, int outputBufferSize)
+{
 	Thread* newThread = (Thread*)malloc(sizeof(Thread));
 	if (newThread == NULL) {
 		printf("Memory allocation failed.\n");
 		return NULL;
 	}
 
-	newThread->p_thread_params = (COMMAND_THREAD_params_t*)malloc(sizeof(COMMAND_THREAD_params_t));
-	if (newThread->p_thread_params == NULL) {
+	newThread->threadParams = (ThreadParams*)malloc(sizeof(ThreadParams));
+	if (newThread->threadParams == NULL) {
 		printf("Memory allocation failed.\n");
 		FreeThread(newThread);
 		return NULL;
 	}
+
+	//set parameters of thread
+	newThread->threadParams->maxNumber = maxNumber;
+	newThread->threadParams->outputBufferSize = outputBufferSize;
+	newThread->threadParams->ptrToAnchorArray = *mutexAnchorArray;
+	newThread->threadParams->ptrToOutputBufferArray = *bufferValue;
+	newThread->threadParams->ptrToSemaphore = *bufferQueueSemaphore;
 
 	newThread->Id = (DWORD*)malloc(sizeof(DWORD));
 	if (newThread->Id == NULL) {
@@ -207,181 +156,110 @@ Thread* InitNewThread() {
 		return NULL;
 	}
 
-	//newThread->p_thread_params->ExpectedResultPath = (char*)malloc(sizeof(char) * 100);
-	//if (newThread->p_thread_params->ExpectedResultPath == NULL) {
-	//	printf("Memory allocation failed.\n");
-	//	FreeThread(newThread);
-	//	return NULL;
-	//}
-
-	////set expected rusults
-	//snprintf(newThread->p_thread_params->ExpectedResultPath, expectedSize + 1, "%s%s", rel, arr[1]);
-	//newThread->p_thread_params->Command = (char*)malloc(sizeof(char) * 100);
-	//if (newThread->p_thread_params->Command == NULL) {
-	//	printf("Memory allocation failed.\n");
-	//	FreeThread(newThread);
-	//	return NULL;
-	//}
-
 	return newThread;
 }
 
-char* TranslateExitCode(Thread* thread) {
-	int exitCode = thread->ExitCode;
-	if (thread->p_thread_params->isCrashed) {
-		char* crashString = (char*)malloc(sizeof(char) * 11);
-		int retVal = sprintf_s(crashString, 11, "Crashed %d", exitCode);
-		if (retVal == 0) {
-			return "Crashed";
+int RunLogicSortThread(ThreadParams* params) {
+	int maxNumber = params->maxNumber;
+	int outputBufferSize = params->outputBufferSize;
+	BufferValue* bufferArray = params->ptrToOutputBufferArray;
+	Semaphore* semaphore = params->ptrToSemaphore;
+	int outputSize = maxNumber * maxNumber;
+	BufferValue* outArrayFinal = (BufferValue*)malloc(sizeof(BufferValue)*(outputSize));
+	int calcFinished = 0;
+	int outputBufferEmpty = 0;
+	while (!calcFinished && !outputBufferEmpty) {
+		//read value and up semaphore
+		BufferValue* val = readValueFromOutputBufferAndUpSemaphore(semaphore, bufferArray,outputBufferSize,&outputBufferEmpty);
+		//insert into outArrayFinal ending
+		outArrayFinal[outputSize - 1].a = val->a;
+		outArrayFinal[outputSize - 1].b = val->b;
+		outArrayFinal[outputSize - 1].c = val->c;
+		outArrayFinal[outputSize - 1].n = val->n;
+		outArrayFinal[outputSize - 1].m = val->m;
+		//sort array
+		qsort(outArrayFinal, outputSize, sizeof(BufferValue), compareBufferValues);
+		//check outputempty
+		calcFinished = params->calcFinished;
+		if (calcFinished) {
+			printf("DEBUG: calcFinished changed to 1!\n");
 		}
-		return crashString;
 	}
-	switch (exitCode) {
-	case 0:
-		return "Succeeded";
-	case -1:
-		return "Crashed";
-	case -2:
-		return "Failed";
-	case -3:
-		return "Timed Out";
-	}
-	return NULL;
+	printResults(params->filePath, outArrayFinal, outputSize);
+	return 0;
 }
 
-int SplitLine(const char *str, char c, char*** arr) {
-	int count = 1;
-	int token_len = 1;
-	int i = 0;
-	char *p;
-	char *t;
-	p = str;
-	while (*p != '\0') {
-		if (*p == c) {
-			count++;
+int compareBufferValues(const void * elem1, const void * elem2)
+{
+	BufferValue* val1 = (BufferValue*)elem1;
+	BufferValue* val2 = (BufferValue*)elem2;
+	int n1 = val1->n;
+	int n2 = val2->n;
+	int m1 = val1->n;
+	int m2 = val2->n;
+	if (n1 > n2) {
+		return  -1;
+	}
+	else if (n1 == n2) {
+		if (m1 > m2) {
+			return -1;
 		}
-		p++;
-	}
-	*arr = (char**)malloc(sizeof(char*) * count);
-	if (*arr == NULL) {
-		printf("Memory allocation failed.\n");
-		return -1;
-	}
-	p = str;
-	while (*p != '\0') {
-		if (*p == c) {
-			(*arr)[i] = (char*)malloc(sizeof(char) * token_len);
-			if ((*arr)[i] == NULL) {
-				printf("Memory allocation failed.\n");
-				return -1;
-			}
-			token_len = 0;
-			i++;
-		}
-		p++;
-		token_len++;
-	}
-	(*arr)[i] = (char*)malloc(sizeof(char) * token_len);
-	if ((*arr)[i] == NULL) {
-		printf("Memory allocation failed.\n");
-		return -1;
-	}
-	i = 0;
-	p = str;
-	t = ((*arr)[i]);
-	while (*p != '\0') {
-		if (*p != c && *p != '\0') {
-			*t = *p;
-			t++;
+		else if (m1 == m2) {
+			return 0;
 		}
 		else {
-			*t = '\0';
-			i++;
-			t = ((*arr)[i]);
+			return 1;
 		}
-		p++;
 	}
-	return count;
+	else {
+		return 1;
+	}
 }
 
-char** SplitLineArguments(const char *str) {
-	char** results = (char**)malloc(sizeof(char*) * 2);
-	if (results == NULL) {
-		printf("Memory allocation failed.\n");
-		return NULL;
+BufferValue * readValueFromOutputBufferAndUpSemaphore(Semaphore * semaphore, BufferValue * bufferArray, int outputBufferSize, int * outputBufferEmpty)
+{
+	BufferValue* retVal = (BufferValue*)malloc(sizeof(BufferValue));
+	int found = 0;
+	for (int i = 0; i < outputBufferSize; i++) {
+		WaitForSingleObject(bufferArray[i].mutex->handle, 0);
+		if (bufferArray[i].aquired == 1) {
+			retVal->a = bufferArray[i].a;
+			retVal->b = bufferArray[i].b;
+			retVal->c = bufferArray[i].c;
+			retVal->n = bufferArray[i].n;
+			retVal->m = bufferArray[i].m;
+			bufferArray[i].aquired = 0;
+		}
+		ReleaseMutex(bufferArray[i].mutex->handle);
+		if (found) {
+			break;
+		}
 	}
-
-	char* newP = strrchr(str, ' ');
-	if (newP == NULL) {
-		printf("Not enough arguments given");
-		return NULL;
+	ReleaseSemaphore(semaphore->handle, 1, NULL);
+	if (!found) {
+		printf("DEBUG: finished for loop and didnt find any object\n");
+		*outputBufferEmpty = 1;
 	}
-
-	int len = newP - str;
-	results[0] = (char*)malloc(sizeof(char)*len);
-	if (results[0] == NULL) {
-		free(results);
-		printf("Memory allocation failed.\n");
-		return NULL;
-	}
-
-	snprintf(results[0], len + 1, str);
-	int res1Len = strlen(str) - len;
-	results[1] = (char*)malloc(sizeof(char)*res1Len);
-	if (results[1] == NULL) {
-		free(results[0]);
-		free(results);
-		printf("Memory allocation failed.\n");
-		return NULL;
-	}
-	snprintf(results[1], res1Len + 1, newP + 1);
-	return results;
+	return retVal;
 }
 
-char* ConverExeExtensionToTxt(char *orig, char *rep, char *with) {
-	char *result; // the return string
-	char *ins;    // the next insert point
-	char *tmp;    // varies
-	int len_rep;  // length of rep (the string to remove)
-	int len_with; // length of with (the string to replace rep with)
-	int len_front; // distance between rep and end of last rep
-	int count;    // number of replacements
-
-	// sanity checks and initialization
-	if (!orig || !rep)
-		return NULL;
-	len_rep = strlen(rep);
-	if (len_rep == 0)
-		return NULL; // empty rep causes infinite loop during count
-	if (!with)
-		with = "";
-	len_with = strlen(with);
-
-	// count the number of replacements needed
-	ins = orig;
-	for (count = 0; tmp = strstr(ins, rep); ++count) {
-		ins = tmp + len_rep;
+int printResults(char* filePath,BufferValue* bufferArray,int outputBufferSize) {
+	int i;
+	FILE* file = NULL;
+	int retVal = fopen_s(&file, filePath, "w+");
+	if (file == NULL) {
+		printf("ERROR: opening file!\n");
+		return -2;
 	}
-
-	tmp = result = malloc(strlen(orig) + (len_with - len_rep) * count + 1);
-
-	if (!result)
-		return NULL;
-
-	// first time through the loop, all the variable are set correctly
-	// from here on,
-	//    tmp points to the end of the result string
-	//    ins points to the next occurrence of rep in orig
-	//    orig points to the remainder of orig after "end of rep"
-	while (count--) {
-		ins = strstr(orig, rep);
-		len_front = ins - orig;
-
-		snprintf(tmp, len_front + 1, orig);
-		snprintf(tmp + len_front, strlen(with) + 1, with);
-		orig += len_front + len_rep; // move to next "end of rep"
+	for (i = 0; i < outputBufferSize; i++) {
+		char buffer[20];
+		retVal = sprintf_s(buffer, 20, "%d,%d,%d",bufferArray[i].a, bufferArray[i].b, bufferArray[i].c);
+		if (retVal == 0) {
+			printf("ERROR: inserting text when writing to file");
+			return -2;
+		}
+		fprintf(file, "%s\n", buffer);
 	}
-
-	snprintf(tmp, strlen(result) + 1, result);
-	return result;
+	fclose(file);
+	return 0;
 }

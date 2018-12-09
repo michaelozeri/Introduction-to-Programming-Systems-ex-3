@@ -9,7 +9,7 @@ int CreateThreadMain() {
 	DWORD wait_code;
 	DWORD exit_code;
 	BOOL ret_val;
-	COMMAND_THREAD_params_t *p_thread_params;
+	ThreadParams *threadParams;
 
 	/*
 	* Allocate memory for thread parameters
@@ -25,43 +25,43 @@ int CreateThreadMain() {
 	* variable, because we wait on the thread on the same function where it is
 	* created.
 	*/
-	p_thread_params = (COMMAND_THREAD_params_t *)malloc(sizeof(COMMAND_THREAD_params_t));
-	if (NULL == p_thread_params)
+	threadParams = (ThreadParams *)malloc(sizeof(ThreadParams));
+	if (NULL == threadParams)
 	{
-		printf("Error when allocating memory");
+		printf("ERROR: when allocating memory");
 		return -1;
 	}
 
-	/* Prepare parameters for thread */
-	p_thread_params->Command =
-		p_thread_params->ExpectedResultPath;
+	///* Prepare parameters for thread */
+	//threadParams->Command =
+	//	threadParams->ExpectedResultPath;
 
 	/* Create thread */
-	thread_handle = CreateThreadSimple(CalculationThreadFunc, p_thread_params, &thread_id);
+	thread_handle = CreateThreadSimple(CalculationThreadFunc, threadParams, &thread_id);
 	if (NULL != thread_handle) {
-		printf("Error when creating thread\n");
+		printf("ERROR: when creating thread\n");
 		return -1;
 	}
 
 	/* Wait */
 	wait_code = WaitForSingleObject(thread_handle, INFINITE);
 	if (WAIT_OBJECT_0 != wait_code) {
-		printf("Error when waiting\n");
+		printf("ERROR: when waiting\n");
 		return -1;
 	}
 
 	/* Check the DWORD returned by MathThread */
 	ret_val = GetExitCodeThread(thread_handle, &exit_code);
 	if (0 == ret_val) {
-		printf("Error when getting thread exit code\n");
+		printf("ERROR: when getting thread exit code\n");
 	}
 
 	/* Print results, if thread succeeded */
 	/*if (MATH_THREAD__CODE_SUCCESS == exit_code)
 	{
-	printf("%d + %d = %d\n", p_thread_params->num1,
-	p_thread_params->num2,
-	p_thread_params->res);
+	printf("%d + %d = %d\n", threadParams->num1,
+	threadParams->num2,
+	threadParams->res);
 	}
 	else
 	{
@@ -69,13 +69,13 @@ int CreateThreadMain() {
 	}*/
 
 	/* Free memory */
-	free(p_thread_params);
+	free(threadParams);
 
 	/* Close thread handle */
 	ret_val = CloseHandle(thread_handle);
 	if (false == ret_val)
 	{
-		printf("Error when closing\n");
+		printf("ERROR: when closing\n");
 		return -1;
 	}
 
@@ -87,14 +87,14 @@ HANDLE CreateThreadSimple(LPTHREAD_START_ROUTINE p_start_routine, LPVOID p_threa
 
 	if (NULL == p_start_routine)
 	{
-		printf("Error when creating a thread");
+		printf("ERROR: when creating a thread");
 		printf("Received null pointer");
 		exit(-1);
 	}
 
 	if (NULL == p_thread_id)
 	{
-		printf("Error when creating a thread");
+		printf("ERROR: when creating a thread");
 		printf("Received null pointer");
 		exit(-1);
 	}
