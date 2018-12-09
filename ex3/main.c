@@ -2,9 +2,10 @@
 #include "Command_Thread.h"
 #include "Parallel.h"
 
+
 int main(int argc, char** argv) {
 	if (argc < 5) {
-		printf("ERROR: no enough arguments\n");
+		error("no enough arguments");
 		return -1;
 	}
 
@@ -12,12 +13,19 @@ int main(int argc, char** argv) {
 	int numOfComputationThreads = atoi(argv[2]);
 	int outputBufferSize = atoi(argv[3]);
 	char* outputFilePath = argv[4];
-	int calcFinished = 0;
+	int* calcFinished = (int*)malloc(sizeof(int));
+	if (calcFinished == NULL) {
+		error("creating calcFinished");
+		return -1;
+	}
+	*calcFinished = 0;
+
+	debug("after parsing arguments");
 
 	//create semaphore for quque
 	Semaphore* bufferQueueSemaphore = (Semaphore*)malloc(sizeof(Semaphore));
 	if (bufferQueueSemaphore == NULL) {
-		printf("ERROR: creating semaphore struct\n");
+		error("creating semaphore struct");
 		return -1;
 	}
 	//create semaphore with size of outputbuffer
@@ -26,9 +34,11 @@ int main(int argc, char** argv) {
 		SEMAPHORE_INITIAL_VALUE,
 		outputBufferSize, "bufferQueueSemaphore");
 	if (bufferQueueSemaphore->handle == NULL) {
-		printf("ERROR: creating semaphore handle\n");
+		error("creating semaphore handle");
 		return -1;
 	}
+
+	debug("after creating semaphore");
 
 	//create maxNumber array
 	Mutex* mutexAnchorArray = (Mutex*)malloc(sizeof(Mutex)*maxNumber);
@@ -39,48 +49,57 @@ int main(int argc, char** argv) {
 			true, //TODO: thread calling create process should be its initial owner?
 			NULL); // its possible to use null but we need to make sure not to lose handle
 		if (mutexAnchorArray[i].handle == NULL) {
-			printf("ERROR: creating mutex anchor array\n");
+			error("creating mutex anchor array");
 			return -1;
 		}
 	}
 
+	debug("after creating anchor array");
+
 	//create output buffer array
 	BufferValue* output_buffer = (BufferValue*)malloc(sizeof(BufferValue)*outputBufferSize);
 	if (output_buffer == NULL) {
-		printf("ERROR: creating output_bufer memory\n");
+		error("creating output_bufer memory");
 		return -1;
 	}
 	for (int i = 0; i < outputBufferSize; i++) {
 		output_buffer->mutex = CreateMutex(NULL, true, NULL);
 		if (output_buffer->mutex == NULL) {
-			printf("ERROR: creating bufferd value mutex\n");
+			error("creating bufferd value mutex");
 			return -1;
 		}
 	}
 
+	debug("after creating output buffer array");
+
 	//create calculation threads
 	Thread** calcThreads = (Thread**)malloc(sizeof(Thread*));
 	if (calcThreads == NULL) {
-		printf("ERROR: Memory allocation failed for calc threads array\n");
+		error("memory allocation failed for calc threads array");
 		//FreeResultsObject(testFile);
 		return -1;
 	}
 
+	debug("after creating calculation threads array");
+
 	//create sortThread
 	Thread* sortThread = (Thread*)malloc(sizeof(Thread));
 	if (sortThread == NULL) {
-		printf("ERROR: when creating thread\n");
+		error("when creating sore thread memory");
 		return -1;
 	}
 	if (createAndValidateSortThread(&sortThread, &output_buffer, &mutexAnchorArray, &bufferQueueSemaphore, maxNumber, outputBufferSize, &calcFinished, outputFilePath)) {
-		printf("ERROR: when creating thread\n");
+		error("when creating thread");
 		return -1;
 	}
+
+	//debug("after creating sort thread");
 
 	//create calculation threads
 	for (int i = 0; i < numOfComputationThreads; i++) {
 		calcThreads[i] = initNewThread(&output_buffer, &mutexAnchorArray, &bufferQueueSemaphore, maxNumber, outputBufferSize);
 		if (calcThreads[i] == NULL) {
+			error("creating new thread failed");
 			//FreeResultsObject(testFile);
 			FreeThreadArray(calcThreads, i);
 			return -1;
@@ -89,27 +108,33 @@ int main(int argc, char** argv) {
 	}
 	CreateAllCalculationThreads(calcThreads, numOfComputationThreads);
 
+	debug("after running calculation threads");
+
 	/* Wait  for calc threads to finish*/
 	for (int i = 0; i < numOfComputationThreads; i++) {
 		//system call
 		calcThreads[i]->WaitCode = WaitForSingleObject(calcThreads[i]->Handle, INFINITE);
 		if (calcThreads[i]->WaitCode != WAIT_OBJECT_0) {
-			printf("ERROR: when waiting for calc Threads\n");
+			error("when waiting for calc Threads, exit code is bad");
 			FreeThreadArray(calcThreads, numOfComputationThreads);
 			return -1;
 		}
 	}
 
 	//setCalcFinished to true
-	calcFinished = 1;
+	*calcFinished = 1;
+
+	debug("set calcFinished to 1 by main");
 
 	//wait for sort thread to finish writing to file
 	sortThread->WaitCode = WaitForSingleObject(sortThread->Handle, INFINITE);
 	if (sortThread->WaitCode != WAIT_OBJECT_0) {
-		printf("ERROR: when waiting for sort Thread\n");
+		error("when waiting for sort Thread");
 		//FreeThreadArray(calcThreads, numOfComputationThreads);
 		return -1;
 	}
+
+	debug("finished waiting to sort thread");
 
 	//DWORD exit_code = 1;
 	///* Get Exit Code */
@@ -121,10 +146,11 @@ int main(int argc, char** argv) {
 	//	}
 	//}
 
-	if (FreeThreadArray(calcThreads, outputFilePath) != 0) {
+	/*if (FreeThreadArray(calcThreads, outputFilePath) != 0) {
 		printf("ERROR: when closing thread handles");
 		return -1;
-	}
+	}*/
+
 	return 0;
 }
 

@@ -34,10 +34,19 @@ int FreeThreadArray(Thread** arr, int numOfMembers) {
 	return code;
 }
 
-int createAndValidateSortThread(Thread** sortThread, BufferValue ** bufferValue, Mutex ** mutexAnchorArray, Semaphore ** bufferQueueSemaphore, int maxNumber, int outputBufferSize,int* calcfinished,char* outputFilePath)
+int createAndValidateSortThread(Thread** sortThread,
+	BufferValue ** bufferValue,
+	Mutex ** mutexAnchorArray,
+	Semaphore ** bufferQueueSemaphore,
+	int maxNumber,
+	int outputBufferSize,
+	int** calcfinished,
+	char* outputFilePath)
 {
 	(*sortThread) = initNewThread(bufferValue, mutexAnchorArray, bufferQueueSemaphore, maxNumber, outputBufferSize);
-	*((*sortThread)->threadParams->calcFinished) = *calcfinished;
+
+	(*sortThread)->threadParams->calcFinished = *calcfinished;
+
 	//system call
 	(*sortThread)->Handle = CreateThread(
 		NULL,
@@ -67,11 +76,9 @@ int RunCalLogic(ThreadParams * threadParams)
 		if (WaitForSingleObject(anchorArray[i].handle, 0) != WAIT_OBJECT_0) {
 			continue;
 		}
+		debug("calc thread aquired anchor!");
 		int n = i + 1;
-		int a, b, c;
-
 		calcNMAndWriteToSemaphore(n, maxNumber, semaphore, bufferArray, outputBufferSize);
-
 		//release mutex
 		ReleaseMutex(anchorArray[i].handle);
 	}
@@ -131,13 +138,13 @@ Thread * initNewThread(BufferValue ** bufferValue, Mutex ** mutexAnchorArray, Se
 {
 	Thread* newThread = (Thread*)malloc(sizeof(Thread));
 	if (newThread == NULL) {
-		printf("Memory allocation failed.\n");
+		error("Memory allocation failed for new Thread");
 		return NULL;
 	}
 
 	newThread->threadParams = (ThreadParams*)malloc(sizeof(ThreadParams));
 	if (newThread->threadParams == NULL) {
-		printf("Memory allocation failed.\n");
+		error("Memory allocation failed for thread parameters");
 		FreeThread(newThread);
 		return NULL;
 	}
@@ -151,12 +158,17 @@ Thread * initNewThread(BufferValue ** bufferValue, Mutex ** mutexAnchorArray, Se
 
 	newThread->Id = (DWORD*)malloc(sizeof(DWORD));
 	if (newThread->Id == NULL) {
-		printf("Memory allocation failed.\n");
+		error("Memory allocation failed for thread ID");
 		FreeThread(newThread);
 		return NULL;
 	}
+	/*newThread->threadParams->calcFinished = (int*)malloc(sizeof(int));
+	if (newThread->threadParams->calcFinished == NULL) {
+		error("creating mem for calcFinished");
+		return NULL;
+	}
 
-	return newThread;
+	return newThread;*/
 }
 
 int RunLogicSortThread(ThreadParams* params) {
@@ -170,7 +182,7 @@ int RunLogicSortThread(ThreadParams* params) {
 	int outputBufferEmpty = 0;
 	while (!calcFinished && !outputBufferEmpty) {
 		//read value and up semaphore
-		BufferValue* val = readValueFromOutputBufferAndUpSemaphore(semaphore, bufferArray,outputBufferSize,&outputBufferEmpty);
+		BufferValue* val = readValueFromOutputBufferAndUpSemaphore(semaphore, bufferArray, outputBufferSize, &outputBufferEmpty);
 		//insert into outArrayFinal ending
 		outArrayFinal[outputSize - 1].a = val->a;
 		outArrayFinal[outputSize - 1].b = val->b;
@@ -180,7 +192,7 @@ int RunLogicSortThread(ThreadParams* params) {
 		//sort array
 		qsort(outArrayFinal, outputSize, sizeof(BufferValue), compareBufferValues);
 		//check outputempty
-		calcFinished = params->calcFinished;
+		calcFinished = *(params->calcFinished);
 		if (calcFinished) {
 			printf("DEBUG: calcFinished changed to 1!\n");
 		}
@@ -243,7 +255,7 @@ BufferValue * readValueFromOutputBufferAndUpSemaphore(Semaphore * semaphore, Buf
 	return retVal;
 }
 
-int printResults(char* filePath,BufferValue* bufferArray,int outputBufferSize) {
+int printResults(char* filePath, BufferValue* bufferArray, int outputBufferSize) {
 	int i;
 	FILE* file = NULL;
 	int retVal = fopen_s(&file, filePath, "w+");
@@ -253,7 +265,7 @@ int printResults(char* filePath,BufferValue* bufferArray,int outputBufferSize) {
 	}
 	for (i = 0; i < outputBufferSize; i++) {
 		char buffer[20];
-		retVal = sprintf_s(buffer, 20, "%d,%d,%d",bufferArray[i].a, bufferArray[i].b, bufferArray[i].c);
+		retVal = sprintf_s(buffer, 20, "%d,%d,%d", bufferArray[i].a, bufferArray[i].b, bufferArray[i].c);
 		if (retVal == 0) {
 			printf("ERROR: inserting text when writing to file");
 			return -2;
@@ -262,4 +274,16 @@ int printResults(char* filePath,BufferValue* bufferArray,int outputBufferSize) {
 	}
 	fclose(file);
 	return 0;
+}
+
+void debug(char * str)
+{
+	if (DEBUG_ON) {
+		printf("DEBUG: %s\n", str);
+	}
+}
+
+void error(char * str)
+{
+	printf("ERROR: %s\n", str);
 }

@@ -12,11 +12,12 @@
 #include <tchar.h> 
 #include <stdbool.h>
 #include "Extensions.h"
+#include "Parallel.h"
 
 // Function Declarations -------------------------------------------------------
 
 /*
-* Math thread. This thread adds up to numbers.
+* calculation thread. This thread adds up to numbers.
 */
 DWORD WINAPI CalculationThreadFunc(LPVOID lpParam);
 

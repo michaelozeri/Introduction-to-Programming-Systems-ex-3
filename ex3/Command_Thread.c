@@ -3,7 +3,6 @@
 #include "Command_Thread.h"
 #include "Extensions.h"
 
-
 DWORD WINAPI CalculationThreadFunc(LPVOID lpParam) {
 	ThreadParams* params;
 

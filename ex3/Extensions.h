@@ -5,9 +5,12 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include "Parallel.h"
-#include "ThreadManager.h"
 #include "Extensions.h"
 /* Constants */
+
+#define SEMAPHORE_INITIAL_VALUE 1
+#define SEMAPHORE_MAX_VALUE 1
+#define DEBUG_ON 1
 
 /* Struct Declerations */
 /* ResultFile is a struct representing a read file
@@ -107,16 +110,6 @@ pathToResultsFile - path To Results File
 */
 int CreateAllCalculationThreads(Thread** allThreads, int numberOfThreads);
 
-/*
-this function checks the resultCode of each process and prints it into the file
-which path is given
-Parameters:
-all Threads - the array of threads to print the result into the file
-numberOfThreads - the size of allThreads array
-pathToResultsFile - the path to the result file to print into
-Returns: 0 on success else -2
-*/
-int PrintResults(Thread** allThreads, int numberOfThreads, char* pathToResultsFile);
 
 /*
 this function frees the thread array and releases mem allocated
@@ -127,20 +120,107 @@ Returns: 0 on success else -1;
 */
 int FreeThreadArray(Thread** arr, int numOfMembers);
 
-int createAndValidateSortThread(Thread** sortThread, BufferValue** bufferValue, Mutex** mutexAnchorArray, Semaphore** bufferQueueSemaphore, int maxNumber, int outputBufferSize, int* calcfinished,char* outputFilePath);
+/*
+this function prints the bufferarray of results into the path give nby the path
+Parameters:
+filePath - the file path print into
+bufferArray - the array from which to take values to print to the file
+outputBufferSize - size of the bufferArray
+*/
+int printResults(char* filePath, BufferValue* bufferArray, int outputBufferSize);
 
-int RunCalLogic(ThreadParams* p_params);
+/*
+this function creates the sort array and also checks it was created successfully
+Parameters:
+sortThread - the pointer to the pointer of the sort threat to create
+bufferValue - the output buffer to set to parameters of the thread
+mutexAnchorArray - the mutexAnchorArray to set to parameters of the thread
+bufferQueueSemaphore - the bufferQueueSemaphore to set to parameters of the thread
+maxNumber - the size of number array given in args of program
+outputBufferSize - size of output buffer
+calcfinished - pointer to pointer of boolean that says if calc is finished
+outputFilePath - path to output file to set to thread parameters
+*/
+int createAndValidateSortThread(Thread** sortThread,
+	BufferValue** bufferValue,
+	Mutex** mutexAnchorArray,
+	Semaphore** bufferQueueSemaphore,
+	int maxNumber,
+	int outputBufferSize,
+	int** calcfinished,
+	char* outputFilePath);
 
+/*
+this function runs the main logic of calculation threads
+parameters:
+threadParams - the parameters of the thread to use
+*/
+int RunCalLogic(ThreadParams* threadParams);
+
+/*
+this function takes an n as an anchor and runs on maxNumber array to calculate a,b,c and save them into the output_buffer
+is called by calculation threads
+parameters:
+n - the anchor number to start from
+maxNumber - the arg given to the program
+semaphore - the pointer to the semaphore of output_buffer
+bufferArray - pointer to output_buffer array
+outputBufferSize - the size of output_buffer
+*/
 void calcNMAndWriteToSemaphore(int n, int maxNumber, Semaphore * semaphore, BufferValue * bufferArray, int outputBufferSize);
 
+/*
+this function saves the values given by a,b,c,n,m into the bufferArray at location place
+parameters:
+bufferArray - pointer to output_buffer to save the values into
+place - location to save in bufferArray (output_buffer) the values
+a,c,b,n,m - values to be written
+*/
 void setValueToBufferValue(BufferValue * bufferArray, int place, int a, int b, int c, int n, int m);
 
+/*
+this function fids greatest common divisor of n1,n2
+parameters:
+n1,n2 - the numbers which to find GCD
+*/
 int findGCD(int n1, int n2);
 
+/*
+this is the main logic of the sort thread to be run
+parameters:
+params - parameters for the thread to run initialized at main function
+*/
 int RunLogicSortThread(ThreadParams* params);
 
+/*
+comperator function to give for qsort function in sort thread
+parameters:
+elem1,elem2 - the two values to compare in the BufferValue array
+*/
 int compareBufferValues(const void * elem1, const void * elem2);
 
+/*
+this function is used by the sort thread, it reads a value from the output_buffer (bufferArray) and up(semaphore)
+parameters:
+semaphore - the array semaphore
+bufferArray - the buffer array to read from
+outputBufferSize - size of output_buffer
+outputBufferEmpty - return argument to set if the output_buffer is empty
+*/
 BufferValue* readValueFromOutputBufferAndUpSemaphore(Semaphore* semaphore, BufferValue* bufferArray, int outputBufferSize, int* outputBufferEmpty);
 
-int printResults(char* filePath, BufferValue* bufferArray, int outputBufferSize);
+/*
+prints "DEBUG:" before the string if macro DEBUG_ON is enabled
+parameters:
+str - the string to debug
+*/
+void debug(char* str);
+
+/*
+prints "ERROR:" before the string 
+parameters:
+str - the string to print error log for
+*/
+void error(char* str);
+
+

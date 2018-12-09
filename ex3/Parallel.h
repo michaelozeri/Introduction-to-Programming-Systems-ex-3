@@ -4,14 +4,17 @@
 #include <stdio.h>
 #include <stdbool.h>
 
-#define SEMAPHORE_INITIAL_VALUE 1
-#define SEMAPHORE_MAX_VALUE 1
-
+/*
+struct representing the mutex has a handle to the mutex
+*/
 typedef struct Mutex {
 	HANDLE handle;
 }Mutex;
 
 
+/*
+struct representing the semaphore has a handle to the semaphore
+*/
 typedef struct Semaphore {
 	HANDLE handle;
 }Semaphore;
