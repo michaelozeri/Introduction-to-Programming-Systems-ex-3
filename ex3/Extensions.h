@@ -1,31 +1,14 @@
 #pragma once
 
 /* Includes */
-#include <windows.h>
-#include <stdio.h>
-#include <stdbool.h>
 #include "Parallel.h"
 #include "Extensions.h"
-/* Constants */
 
-#define SEMAPHORE_INITIAL_VALUE 1
-#define SEMAPHORE_MAX_VALUE 1
+/* Constants */
 #define DEBUG_ON 1
 #define PRINTNM 1
 #define DEBUG_BUFFER_SIZE 300
-
-/* Struct Declerations */
-/* ResultFile is a struct representing a read file
-*	Members:
-*			Results- an array of string representing the content of the file, where every line of the file is a member of the array.
-*			NumberOfElements - the number of lines in the read file
-*			TotalSize- The total size of the array
-*/
-typedef struct ResultFile {
-	char **Results;
-	int NumberOfElements;
-	int TotalSize;
-} ResultFile;
+#define DEBUG_TO_FILE 1
 
 /* ThreadParams is a struct representing the params given to a command thread
 *	Members:
@@ -59,33 +42,10 @@ typedef struct Thread {
 	HANDLE Handle;
 	DWORD* Id;
 	DWORD WaitCode;
-	DWORD ExitCode;
-	BOOL ReturnValue;
 	LPTHREAD_START_ROUTINE Function;
 	ThreadParams *threadParams;
 } Thread;
 
-/*
-* this is the struct that represents a value to insert into the output_buffer
-*/
-typedef struct BufferValue {
-	int a;
-	int b;
-	int c;
-	int n;
-	int m;
-	int aquired;
-	Mutex* mutex;
-}BufferValue;
-
-/* Functions Declerations */
-/* FreeResultsObject will free all allocated resources in ResultFile Struct
-* Arguments:
-*		result - the result struct to free
-* Returns:
-*		void
-*/
-void FreeResultsObject(ResultFile* result);
 
 /* FreeStringArray will free all allocated resources in a strings array
 * Arguments:
@@ -112,6 +72,12 @@ pathToResultsFile - path To Results File
 */
 int CreateAndRunAllCalculationThreads(Thread** allThreads, int numberOfThreads);
 
+/*
+frees the thread and all data within
+parameters:
+thread - the thread to be free'd
+*/
+int FreeThread(Thread* thread);
 
 /*
 this function frees the thread array and releases mem allocated
@@ -129,7 +95,7 @@ filePath - the file path print into
 bufferArray - the array from which to take values to print to the file
 outputBufferSize - size of the bufferArray
 */
-int printResults(char* filePath, BufferValue* bufferArray, int outputBufferSize);
+int printResults(char* filePath, BufferValue* bufferArray, int outputBufferSize,int totalWrote);
 
 /*
 this function runs the main logic of calculation threads
@@ -217,5 +183,13 @@ parameters:
 str - the string to print error log for
 */
 void error(char* str);
+
+/*
+this function creates all calculation threads calling CreateThread syscall
+parameters:
+allThreads - the array of threads to run
+numberOfThreads - allThreads array size
+*/
+int CreateAndRunAllCalculationThreads(Thread** allThreads, int numberOfThreads);
 
 

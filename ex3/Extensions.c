@@ -2,11 +2,6 @@
 #include "Extensions.h"
 
 
-void FreeResultsObject(ResultFile* result) {
-	FreeStringArray(result->Results, result->NumberOfElements);
-	free(result);
-}
-
 void FreeStringArray(char** arr, int numOfMembers) {
 	for (int i = 0; i < numOfMembers; i++) {
 		free(arr[i]);
@@ -19,8 +14,9 @@ int FreeThread(Thread* thread) {
 	if (CloseHandle(thread->Handle) == false) {
 		returnCode = -1;
 	}
-	free(thread->Id);
-	free(thread);
+	//TODO: why u no working
+	//free(thread->threadParams);
+	//free(thread->Id);
 	return returnCode;
 }
 
@@ -257,15 +253,15 @@ int printResults(char* filePath, BufferValue* bufferArray, int outputBufferSize,
 		return -2;
 	}
 	for (i = totalwrote-1; i >= 0; i--) {
-		char buffer[20];
+		char buffer[DEBUG_BUFFER_SIZE];
 		if (bufferArray[i].a < 0) {
 			break;
 		}
 		if (PRINTNM) {
-			retVal = sprintf_s(buffer, 20, "%d,%d,%d (%d,%d)", bufferArray[i].a, bufferArray[i].b, bufferArray[i].c, bufferArray[i].n, bufferArray[i].m);
+			retVal = sprintf_s(buffer, DEBUG_BUFFER_SIZE, "%d,%d,%d (%d,%d)", bufferArray[i].a, bufferArray[i].b, bufferArray[i].c, bufferArray[i].n, bufferArray[i].m);
 		}
 		else {
-			retVal = sprintf_s(buffer, 20, "%d,%d,%d", bufferArray[i].a, bufferArray[i].b, bufferArray[i].c);
+			retVal = sprintf_s(buffer, DEBUG_BUFFER_SIZE, "%d,%d,%d", bufferArray[i].a, bufferArray[i].b, bufferArray[i].c);
 		}
 		if (retVal == 0) {
 			error("inserting text when writing to file");
@@ -299,9 +295,32 @@ void debug(char * str)
 	if (DEBUG_ON) {
 		printf("DEBUG: %s\n", str);
 	}
+	if (DEBUG_TO_FILE) {
+
+	}
 }
 
 void error(char * str)
 {
-	printf("ERROR: %s, last Error:%s\n", str, GetLastError());
+	printf("ERROR: %s, last Error:%d\n", str, GetLastError());
+}
+
+int CreateAndRunAllCalculationThreads(Thread** allThreads, int numberOfThreads) {
+	for (int i = 0; i < numberOfThreads; i++) {
+		//system call
+		allThreads[i]->Handle = CreateThread(
+			NULL,
+			0,
+			allThreads[i]->Function,
+			allThreads[i]->threadParams,
+			0,
+			allThreads[i]->Id);
+
+		if (allThreads[i]->Handle == NULL) {
+			printf("ERROR: when creating thread\n");
+			FreeThreadArray(allThreads, i);
+			return -1;
+		}
+	}
+	return 0;
 }

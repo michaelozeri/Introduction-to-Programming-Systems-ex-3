@@ -1,7 +1,28 @@
+/*
+this is the program fro ex3 of מבוא לתכנון מערכות
+By:
+Michael ozeri - 302444229
+Omer Machluf - 200892917
+*/
+
 #include "Extensions.h"
 #include "Command_Thread.h"
 #include "Parallel.h"
 
+int FreeAllGlobals(int exitstatus);
+
+//global variables
+int * calcFinished;
+Semaphore* bufferQueueSemaphore;
+Mutex* mutexAnchorArray;
+BufferValue* output_buffer;
+Thread** calcThreads;
+Thread* sortThread;
+
+int maxNumber;
+int numOfComputationThreads;
+int outputBufferSize;
+char* outputFilePath;
 
 int main(int argc, char** argv) {
 	if (argc < 5) {
@@ -9,97 +30,56 @@ int main(int argc, char** argv) {
 		return -1;
 	}
 
-	int maxNumber = atoi(argv[1]);
-	int numOfComputationThreads = atoi(argv[2]);
-	int outputBufferSize = atoi(argv[3]);
-	char* outputFilePath = argv[4];
-	int* calcFinished = (int*)malloc(sizeof(int));
+	maxNumber = atoi(argv[1]);
+	numOfComputationThreads = atoi(argv[2]);
+	outputBufferSize = atoi(argv[3]);
+	outputFilePath = argv[4];
+	calcFinished = (int*)malloc(sizeof(int));
 	if (calcFinished == NULL) {
 		error("creating calcFinished");
 		return -1;
 	}
 	*calcFinished = 0;
 
+	if (numOfComputationThreads > 100 || outputBufferSize > 100 || maxNumber > 1000) {
+		error("wrong arguments inserted");
+		return FreeAllGlobals(-1);
+	}
+
 	printf("max number: %d\nnumber of calcthreads: %d\noutput Buffer Size: %d\noutput file path: %s\n", maxNumber, numOfComputationThreads, outputBufferSize, outputFilePath);
 
 	debug("after parsing arguments");
 
 	//create semaphore for quque
-	Semaphore* bufferQueueSemaphore = (Semaphore*)malloc(sizeof(Semaphore));
+	bufferQueueSemaphore = CreateBufferQueueSemaphore(outputBufferSize);
 	if (bufferQueueSemaphore == NULL) {
-		error("creating semaphore struct");
-		return -1;
+		error("creating buffer quque semaphore");
+		return FreeAllGlobals(-1);
 	}
-	//create semaphore with size of outputbuffer
-	bufferQueueSemaphore->handle = CreateSemaphore(
-		NULL,
-		SEMAPHORE_INITIAL_VALUE,
-		outputBufferSize, "bufferQueueSemaphore");
-	if (bufferQueueSemaphore->handle == NULL) {
-		error("creating semaphore handle");
-		return -1;
-	}
-
 	debug("after creating semaphore");
 
 	//create maxNumber array
-	Mutex* mutexAnchorArray = (Mutex*)malloc(sizeof(Mutex)*maxNumber);
-	for (int i = 0; i < maxNumber; i++)
-	{
-		mutexAnchorArray[i].handle = CreateMutex(
-			NULL, // can be set to null from recitation
-			false, // thread calling create Mutex should be its initial owner?
-			NULL); // its possible to use null but we need to make sure not to lose handle
-		if (mutexAnchorArray[i].handle == NULL) {
-			error("creating mutex anchor array");
-			return -1;
-		}
-		mutexAnchorArray[i].locked = 0;
+	mutexAnchorArray = CreateMutexAnchorArray(maxNumber);
+	if (mutexAnchorArray == NULL) {
+		error("creating mutexAnchorArray");
+		return FreeAllGlobals(-1);
 	}
-
 	debug("after creating anchor array");
 
 	//create output buffer array
-	BufferValue* output_buffer = (BufferValue*)malloc(sizeof(BufferValue)*outputBufferSize);
+	output_buffer = CreateOutputBuffer(outputBufferSize);
 	if (output_buffer == NULL) {
-		error("creating output_bufer memory");
-		return -1;
+		error("creating output_buffer");
+		return FreeAllGlobals(-1);
 	}
-	for (int i = 0; i < outputBufferSize; i++) {
-		output_buffer[i].mutex = (Mutex*)malloc(sizeof(Mutex));
-		if (output_buffer[i].mutex == NULL) {
-			error("creating bufferd value mutex memory");
-			return -1;
-		}
-		output_buffer[i].mutex->handle = CreateMutex(NULL, true, NULL);
-		if (output_buffer[i].mutex->handle == NULL) {
-			error("creating bufferd value mutex");
-			return -1;
-		}
-		//init for not aquired
-		output_buffer[i].aquired = 0;
-	}
-
 	debug("after creating output buffer array");
 
-	//create calculation threads
-	Thread** calcThreads = (Thread**)malloc(sizeof(Thread*));
-	if (calcThreads == NULL) {
-		error("memory allocation failed for calc threads array");
-		//FreeResultsObject(testFile);
-		return -1;
-	}
-
-	debug("after creating calculation threads array");
-
 	//create sortThread
-	Thread* sortThread = (Thread*)malloc(sizeof(Thread));
-	if (sortThread == NULL) {
-		error("when creating sore thread memory");
-		return -1;
-	}
-
 	sortThread = defineNewThread(&output_buffer, &mutexAnchorArray, &bufferQueueSemaphore, maxNumber, outputBufferSize);
+	if (sortThread == NULL) {
+		error("creating new sort thread failed");
+		return FreeAllGlobals(-1);
+	}
 	sortThread->Function = sortThreadFunc;
 	sortThread->threadParams->calcFinished = calcFinished;
 	sortThread->threadParams->filePath = outputFilePath;
@@ -113,20 +93,26 @@ int main(int argc, char** argv) {
 		sortThread->Id);
 	if (sortThread->Handle == NULL) {
 		error("when creating thread\n");
-		//FreeThreadArray(allThreads, i);
-		return -1;
+		return FreeAllGlobals(-1);
 	}
 
 	debug("after creating sort thread");
+
+	//create calculation threads
+	calcThreads = (Thread**)malloc(sizeof(Thread*));
+	if (calcThreads == NULL) {
+		error("memory allocation failed for calc threads array");
+		return FreeAllGlobals(-1);
+	}
+
+	debug("after creating calculation threads array");
 
 	//create calculation threads
 	for (int i = 0; i < numOfComputationThreads; i++) {
 		calcThreads[i] = defineNewThread(&output_buffer, &mutexAnchorArray, &bufferQueueSemaphore, maxNumber, outputBufferSize);
 		if (calcThreads[i] == NULL) {
 			error("creating new thread failed");
-			//FreeResultsObject(testFile);
-			FreeThreadArray(calcThreads, i);
-			return -1;
+			return FreeAllGlobals(-1);
 		}
 		calcThreads[i]->Function = CalculationThreadFunc;
 	}
@@ -140,8 +126,7 @@ int main(int argc, char** argv) {
 		calcThreads[i]->WaitCode = WaitForSingleObject(calcThreads[i]->Handle, INFINITE);
 		if (calcThreads[i]->WaitCode != WAIT_OBJECT_0) {
 			error("when waiting for calc Threads, exit code is bad");
-			FreeThreadArray(calcThreads, numOfComputationThreads);
-			return -1;
+			return FreeAllGlobals(-1);
 		}
 	}
 
@@ -154,37 +139,47 @@ int main(int argc, char** argv) {
 	sortThread->WaitCode = WaitForSingleObject(sortThread->Handle, INFINITE);
 	if (sortThread->WaitCode != WAIT_OBJECT_0) {
 		error("when waiting for sort Thread");
-		//FreeThreadArray(calcThreads, numOfComputationThreads);
-		return -1;
+		return FreeAllGlobals(-1);
 	}
 
 	debug("finished waiting to sort thread");
 
-	/*if (FreeThreadArray(calcThreads, outputFilePath) != 0) {
-		printf("ERROR: when closing thread handles");
-		return -1;
-	}*/
-
-	return 0;
+	return FreeAllGlobals(0);
 }
 
 
-int CreateAndRunAllCalculationThreads(Thread** allThreads, int numberOfThreads) {
-	for (int i = 0; i < numberOfThreads; i++) {
-		//system call
-		allThreads[i]->Handle = CreateThread(
-			NULL,
-			0,
-			allThreads[i]->Function,
-			allThreads[i]->threadParams,
-			0,
-			allThreads[i]->Id);
-
-		if (allThreads[i]->Handle == NULL) {
-			printf("ERROR: when creating thread\n");
-			FreeThreadArray(allThreads, i);
-			return -1;
-		}
+int FreeAllGlobals(int exitstatus) {
+	if (calcFinished != NULL) {
+		free(calcFinished);
 	}
-	return 0;
+	if (bufferQueueSemaphore != NULL) {
+		CloseHandle(bufferQueueSemaphore->handle);
+		free(bufferQueueSemaphore);
+	}
+	//TODO: why u no working
+	/*if (mutexAnchorArray != NULL) {
+		for (int i = 0; i < maxNumber; i++)
+		{
+			if (mutexAnchorArray[i].handle != NULL) {
+				CloseHandle(mutexAnchorArray[i].handle);
+			}
+			free(mutexAnchorArray+i);
+		}
+	}*/
+	/*if (output_buffer != NULL) {
+		for (int i = 0; i < outputBufferSize; i++)
+		{
+			CloseHandle(output_buffer[i].mutex->handle);
+			free(output_buffer[i].mutex);
+			free(output_buffer + i);
+		}
+	}*/
+	if (calcThreads != NULL) {
+		FreeThreadArray(calcThreads,numOfComputationThreads);
+	}
+	if (sortThread != NULL) {
+		FreeThread(sortThread);
+	}
+	return exitstatus;
 }
+

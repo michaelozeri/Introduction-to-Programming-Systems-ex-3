@@ -1,4 +1,3 @@
-#pragma once
 
 // IO_Thread.h
 
@@ -6,13 +5,7 @@
 #define __COMMAND_THREAD_H__
 
 /* Includes */
-#include <windows.h>
-#include <stdio.h>
-#include <wchar.h>
-#include <tchar.h> 
-#include <stdbool.h>
 #include "Extensions.h"
-#include "Parallel.h"
 
 // Function Declarations -------------------------------------------------------
 
