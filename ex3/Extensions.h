@@ -11,8 +11,6 @@
 #define SEMAPHORE_INITIAL_VALUE 1
 #define SEMAPHORE_MAX_VALUE 1
 #define DEBUG_ON 1
-#define PRINTNM 1
-#define DEBUG_BUFFER_SIZE 300
 
 /* Struct Declerations */
 /* ResultFile is a struct representing a read file
@@ -100,7 +98,7 @@ void FreeStringArray(char** arr, int numOfMembers);
 * Returns:
 *		Thread struct representing the new thread
 */
-Thread* defineNewThread(BufferValue** bufferValue, Mutex** mutexAnchorArray, Semaphore** bufferQueueSemaphore, int maxNumber, int outputBufferSize);
+Thread* initNewThread(BufferValue** bufferValue, Mutex** mutexAnchorArray, Semaphore** bufferQueueSemaphore, int maxNumber, int outputBufferSize);
 
 /*
 this function creates the threads stored in allThreads then waits for them to finish and prints results into the file
@@ -110,7 +108,7 @@ allThreads = the array of threads to run
 numberOfThreads - the size of allThreads
 pathToResultsFile - path To Results File
 */
-int CreateAndRunAllCalculationThreads(Thread** allThreads, int numberOfThreads);
+int CreateAllCalculationThreads(Thread** allThreads, int numberOfThreads);
 
 
 /*
@@ -130,6 +128,27 @@ bufferArray - the array from which to take values to print to the file
 outputBufferSize - size of the bufferArray
 */
 int printResults(char* filePath, BufferValue* bufferArray, int outputBufferSize);
+
+/*
+this function creates the sort array and also checks it was created successfully
+Parameters:
+sortThread - the pointer to the pointer of the sort threat to create
+bufferValue - the output buffer to set to parameters of the thread
+mutexAnchorArray - the mutexAnchorArray to set to parameters of the thread
+bufferQueueSemaphore - the bufferQueueSemaphore to set to parameters of the thread
+maxNumber - the size of number array given in args of program
+outputBufferSize - size of output buffer
+calcfinished - pointer to pointer of boolean that says if calc is finished
+outputFilePath - path to output file to set to thread parameters
+*/
+int createAndValidateSortThread(Thread** sortThread,
+	BufferValue** bufferValue,
+	Mutex** mutexAnchorArray,
+	Semaphore** bufferQueueSemaphore,
+	int maxNumber,
+	int outputBufferSize,
+	int** calcfinished,
+	char* outputFilePath);
 
 /*
 this function runs the main logic of calculation threads
@@ -196,20 +215,6 @@ parameters:
 str - the string to debug
 */
 void debug(char* str);
-
-/*
-prints "DEBUG:" before the string if macro DEBUG_ON is enabled
-parameters:
-str - the string to debug
-*/
-void debug2(char* str ,int param1, int param2);
-
-/*
-prints "DEBUG:" before the string if macro DEBUG_ON is enabled
-parameters:
-str - the string to debug
-*/
-void debug1(char* str,int param1);
 
 /*
 prints "ERROR:" before the string 

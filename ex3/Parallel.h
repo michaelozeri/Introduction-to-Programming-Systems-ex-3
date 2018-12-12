@@ -9,7 +9,6 @@ struct representing the mutex has a handle to the mutex
 */
 typedef struct Mutex {
 	HANDLE handle;
-	int locked;
 }Mutex;
 
 

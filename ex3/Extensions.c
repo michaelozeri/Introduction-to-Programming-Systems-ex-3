@@ -34,30 +34,53 @@ int FreeThreadArray(Thread** arr, int numOfMembers) {
 	return code;
 }
 
+int createAndValidateSortThread(Thread** sortThread,
+	BufferValue ** bufferValue,
+	Mutex ** mutexAnchorArray,
+	Semaphore ** bufferQueueSemaphore,
+	int maxNumber,
+	int outputBufferSize,
+	int** calcfinished,
+	char* outputFilePath)
+{
+	(*sortThread) = initNewThread(bufferValue, mutexAnchorArray, bufferQueueSemaphore, maxNumber, outputBufferSize);
+
+	(*sortThread)->threadParams->calcFinished = *calcfinished;
+
+	//system call
+	(*sortThread)->Handle = CreateThread(
+		NULL,
+		0,
+		(*sortThread)->Function,
+		(*sortThread)->threadParams,
+		0,
+		(*sortThread)->Id);
+	if ((*sortThread)->Handle == NULL) {
+		printf("ERROR: when creating thread\n");
+		//FreeThreadArray(allThreads, i);
+		return -1;
+	}
+	return 0;
+}
+
 int RunCalLogic(ThreadParams * threadParams)
 {
 	int maxNumber = threadParams->maxNumber;
 	Mutex* anchorArray = threadParams->ptrToAnchorArray;
 	int outputBufferSize = threadParams->outputBufferSize;
-	BufferValue* bufferArray = threadParams->ptrToOutputBufferArray;
+	BufferValue* bufferArray = threadParams->ptrToAnchorArray;
 	Semaphore* semaphore = threadParams->ptrToSemaphore;
-	debug("parsed all params at calc thread");
+
 	for (int i = 0; i < maxNumber; i++) {
 		//try to aquire anchor
-		if (WaitForSingleObject(anchorArray[i].handle, INFINITE) != WAIT_OBJECT_0) {
-			error("couldnt obtain mutex");
-			return -1;
+		if (WaitForSingleObject(anchorArray[i].handle, 0) != WAIT_OBJECT_0) {
+			continue;
 		}
-		if (anchorArray[i].locked == 0) {
-			anchorArray[i].locked = 1;
-			ReleaseMutex(anchorArray[i].handle);
-			debug1("calc thread aquired anchor: ", i);
-			int n = i + 1;
-			calcNMAndWriteToSemaphore(n, maxNumber, semaphore, bufferArray, outputBufferSize);
-		}
-		else {
-			ReleaseMutex(anchorArray[i].handle);
-		}
+		debug("calc thread aquired anchor!");
+		int n = i + 1;
+		calcNMAndWriteToSemaphore(n, maxNumber, semaphore, bufferArray, outputBufferSize);
+		//release mutex
+		ReleaseMutex(anchorArray[i].handle);
 	}
 
 	return 0;
@@ -77,14 +100,13 @@ void calcNMAndWriteToSemaphore(int n, int maxNumber, Semaphore * semaphore, Buff
 				int written = 0;
 				int location = 0;
 				while (!written) {
-					location = location % 3;
-					WaitForSingleObject(bufferArray[location].mutex->handle, 0);
-					if (bufferArray[location].aquired == 0) {
-						setValueToBufferValue(bufferArray, location, a, b, c, n, m);
-						bufferArray[location].aquired = 1;
+					int place = location % 3;
+					WaitForSingleObject(bufferArray[place].mutex->handle, 0);
+					if (bufferArray[place].aquired == 0) {
+						setValueToBufferValue(bufferArray, place, a, b, c, n, m);
 						written = 1;
 					}
-					ReleaseMutex(bufferArray[location].mutex->handle);
+					ReleaseMutex(bufferArray[place].mutex->handle);
 					location++;
 				}
 				ReleaseSemaphore(semaphore->handle, 1, NULL); //TODO: check return value?
@@ -112,7 +134,7 @@ int findGCD(int n1, int n2) {
 	return gcd;
 }
 
-Thread * defineNewThread(BufferValue ** bufferValue, Mutex ** mutexAnchorArray, Semaphore ** bufferQueueSemaphore, int maxNumber, int outputBufferSize)
+Thread * initNewThread(BufferValue ** bufferValue, Mutex ** mutexAnchorArray, Semaphore ** bufferQueueSemaphore, int maxNumber, int outputBufferSize)
 {
 	Thread* newThread = (Thread*)malloc(sizeof(Thread));
 	if (newThread == NULL) {
@@ -140,8 +162,13 @@ Thread * defineNewThread(BufferValue ** bufferValue, Mutex ** mutexAnchorArray, 
 		FreeThread(newThread);
 		return NULL;
 	}
-	
-	return newThread;
+	/*newThread->threadParams->calcFinished = (int*)malloc(sizeof(int));
+	if (newThread->threadParams->calcFinished == NULL) {
+		error("creating mem for calcFinished");
+		return NULL;
+	}
+
+	return newThread;*/
 }
 
 int RunLogicSortThread(ThreadParams* params) {
@@ -151,44 +178,26 @@ int RunLogicSortThread(ThreadParams* params) {
 	Semaphore* semaphore = params->ptrToSemaphore;
 	int outputSize = maxNumber * maxNumber;
 	BufferValue* outArrayFinal = (BufferValue*)malloc(sizeof(BufferValue)*(outputSize));
-	if (outArrayFinal == NULL) {
-		error("could not allocate mem for outArrayFinal");
-		return -1;
-	}
-	for (int i = 0; i < outputSize; i++)
-	{
-		outArrayFinal[i].a = 0;
-		outArrayFinal[i].b = 0;
-		outArrayFinal[i].c = 0;
-		outArrayFinal[i].n = 0;
-		outArrayFinal[i].m = 0;
-	}
 	int calcFinished = 0;
 	int outputBufferEmpty = 0;
-	debug("parsed all params at sort thread!");
-	int totalwrote = 0;
-	while (!calcFinished || !outputBufferEmpty) {
+	while (!calcFinished && !outputBufferEmpty) {
 		//read value and up semaphore
 		BufferValue* val = readValueFromOutputBufferAndUpSemaphore(semaphore, bufferArray, outputBufferSize, &outputBufferEmpty);
-		if (val != NULL) {
-			//insert into outArrayFinal ending
-			outArrayFinal[outputSize - 1].a = val->a;
-			outArrayFinal[outputSize - 1].b = val->b;
-			outArrayFinal[outputSize - 1].c = val->c;
-			outArrayFinal[outputSize - 1].n = val->n;
-			outArrayFinal[outputSize - 1].m = val->m;
-			//sort array
-			qsort(outArrayFinal, outputSize, sizeof(BufferValue), compareBufferValues);
-			totalwrote++;
-		}
-		
+		//insert into outArrayFinal ending
+		outArrayFinal[outputSize - 1].a = val->a;
+		outArrayFinal[outputSize - 1].b = val->b;
+		outArrayFinal[outputSize - 1].c = val->c;
+		outArrayFinal[outputSize - 1].n = val->n;
+		outArrayFinal[outputSize - 1].m = val->m;
+		//sort array
+		qsort(outArrayFinal, outputSize, sizeof(BufferValue), compareBufferValues);
 		//check outputempty
 		calcFinished = *(params->calcFinished);
 		if (calcFinished) {
-			debug("calcFinished changed to 1!");
+			printf("DEBUG: calcFinished changed to 1!\n");
 		}
 	}
-	printResults(params->filePath, outArrayFinal, outputSize, totalwrote);
+	printResults(params->filePath, outArrayFinal, outputSize);
 	return 0;
 }
 
@@ -198,8 +207,8 @@ int compareBufferValues(const void * elem1, const void * elem2)
 	BufferValue* val2 = (BufferValue*)elem2;
 	int n1 = val1->n;
 	int n2 = val2->n;
-	int m1 = val1->m;
-	int m2 = val2->m;
+	int m1 = val1->n;
+	int m2 = val2->n;
 	if (n1 > n2) {
 		return  -1;
 	}
@@ -232,7 +241,6 @@ BufferValue * readValueFromOutputBufferAndUpSemaphore(Semaphore * semaphore, Buf
 			retVal->n = bufferArray[i].n;
 			retVal->m = bufferArray[i].m;
 			bufferArray[i].aquired = 0;
-			found = 1;
 		}
 		ReleaseMutex(bufferArray[i].mutex->handle);
 		if (found) {
@@ -241,34 +249,25 @@ BufferValue * readValueFromOutputBufferAndUpSemaphore(Semaphore * semaphore, Buf
 	}
 	ReleaseSemaphore(semaphore->handle, 1, NULL);
 	if (!found) {
-		debug("finished for loop and didnt find any object");
+		printf("DEBUG: finished for loop and didnt find any object\n");
 		*outputBufferEmpty = 1;
-		return NULL;
 	}
 	return retVal;
 }
 
-int printResults(char* filePath, BufferValue* bufferArray, int outputBufferSize,int totalwrote) {
+int printResults(char* filePath, BufferValue* bufferArray, int outputBufferSize) {
 	int i;
 	FILE* file = NULL;
 	int retVal = fopen_s(&file, filePath, "w+");
 	if (file == NULL) {
-		error("opening file!\n");
+		printf("ERROR: opening file!\n");
 		return -2;
 	}
-	for (i = totalwrote-1; i >= 0; i--) {
+	for (i = 0; i < outputBufferSize; i++) {
 		char buffer[20];
-		if (bufferArray[i].a < 0) {
-			break;
-		}
-		if (PRINTNM) {
-			retVal = sprintf_s(buffer, 20, "%d,%d,%d (%d,%d)", bufferArray[i].a, bufferArray[i].b, bufferArray[i].c, bufferArray[i].n, bufferArray[i].m);
-		}
-		else {
-			retVal = sprintf_s(buffer, 20, "%d,%d,%d", bufferArray[i].a, bufferArray[i].b, bufferArray[i].c);
-		}
+		retVal = sprintf_s(buffer, 20, "%d,%d,%d", bufferArray[i].a, bufferArray[i].b, bufferArray[i].c);
 		if (retVal == 0) {
-			error("inserting text when writing to file");
+			printf("ERROR: inserting text when writing to file");
 			return -2;
 		}
 		fprintf(file, "%s\n", buffer);
@@ -276,23 +275,6 @@ int printResults(char* filePath, BufferValue* bufferArray, int outputBufferSize,
 	fclose(file);
 	return 0;
 }
-
-void debug2(char * str, int param1, int param2) {
-	char buffer[DEBUG_BUFFER_SIZE];
-	if (sprintf_s(buffer, DEBUG_BUFFER_SIZE, "%s%d", str, param1) != 0) {
-		debug1(buffer,param2);
-	}
-}
-
-void debug1(char * str, int param1) {
-	if (DEBUG_ON) {
-		char buffer[DEBUG_BUFFER_SIZE];
-		if (sprintf_s(buffer, DEBUG_BUFFER_SIZE, "%s%d", str, param1) != 0) {
-			debug(buffer);
-		}
-	}
-}
-
 
 void debug(char * str)
 {
@@ -303,5 +285,5 @@ void debug(char * str)
 
 void error(char * str)
 {
-	printf("ERROR: %s, last Error:%s\n", str, GetLastError());
+	printf("ERROR: %s\n", str);
 }
