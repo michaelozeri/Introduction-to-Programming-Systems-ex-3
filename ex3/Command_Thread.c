@@ -19,6 +19,7 @@ DWORD WINAPI CalculationThreadFunc(LPVOID lpParam) {
 
 DWORD WINAPI sortThreadFunc(LPVOID lpParam)
 {
+	debug("sort thread started!");
 	ThreadParams* threadParams;
 	/* Check if lpParam is NULL */
 	if (NULL == lpParam) {
