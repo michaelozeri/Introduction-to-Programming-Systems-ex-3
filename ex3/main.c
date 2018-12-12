@@ -20,6 +20,8 @@ int main(int argc, char** argv) {
 	}
 	*calcFinished = 0;
 
+	printf("max number: %d\nnumber of calcthreads: %d\noutput Buffer Size: %d\noutput file path: %s\n", maxNumber, numOfComputationThreads, outputBufferSize, outputFilePath);
+
 	debug("after parsing arguments");
 
 	//create semaphore for quque
@@ -45,13 +47,14 @@ int main(int argc, char** argv) {
 	for (int i = 0; i < maxNumber; i++)
 	{
 		mutexAnchorArray[i].handle = CreateMutex(
-			NULL, //can be set to null from recitation
-			true, //TODO: thread calling create process should be its initial owner?
+			NULL, // can be set to null from recitation
+			false, // thread calling create Mutex should be its initial owner?
 			NULL); // its possible to use null but we need to make sure not to lose handle
 		if (mutexAnchorArray[i].handle == NULL) {
 			error("creating mutex anchor array");
 			return -1;
 		}
+		mutexAnchorArray[i].locked = 0;
 	}
 
 	debug("after creating anchor array");
@@ -63,11 +66,18 @@ int main(int argc, char** argv) {
 		return -1;
 	}
 	for (int i = 0; i < outputBufferSize; i++) {
-		output_buffer->mutex = CreateMutex(NULL, true, NULL);
-		if (output_buffer->mutex == NULL) {
+		output_buffer[i].mutex = (Mutex*)malloc(sizeof(Mutex));
+		if (output_buffer[i].mutex == NULL) {
+			error("creating bufferd value mutex memory");
+			return -1;
+		}
+		output_buffer[i].mutex->handle = CreateMutex(NULL, true, NULL);
+		if (output_buffer[i].mutex->handle == NULL) {
 			error("creating bufferd value mutex");
 			return -1;
 		}
+		//init for not aquired
+		output_buffer[i].aquired = 0;
 	}
 
 	debug("after creating output buffer array");
@@ -88,16 +98,30 @@ int main(int argc, char** argv) {
 		error("when creating sore thread memory");
 		return -1;
 	}
-	if (createAndValidateSortThread(&sortThread, &output_buffer, &mutexAnchorArray, &bufferQueueSemaphore, maxNumber, outputBufferSize, &calcFinished, outputFilePath)) {
-		error("when creating thread");
+
+	sortThread = defineNewThread(&output_buffer, &mutexAnchorArray, &bufferQueueSemaphore, maxNumber, outputBufferSize);
+	sortThread->Function = sortThreadFunc;
+	sortThread->threadParams->calcFinished = calcFinished;
+	sortThread->threadParams->filePath = outputFilePath;
+	//system call
+	sortThread->Handle = CreateThread(
+		NULL,
+		0,
+		sortThread->Function,
+		sortThread->threadParams,
+		0,
+		sortThread->Id);
+	if (sortThread->Handle == NULL) {
+		error("when creating thread\n");
+		//FreeThreadArray(allThreads, i);
 		return -1;
 	}
 
-	//debug("after creating sort thread");
+	debug("after creating sort thread");
 
 	//create calculation threads
 	for (int i = 0; i < numOfComputationThreads; i++) {
-		calcThreads[i] = initNewThread(&output_buffer, &mutexAnchorArray, &bufferQueueSemaphore, maxNumber, outputBufferSize);
+		calcThreads[i] = defineNewThread(&output_buffer, &mutexAnchorArray, &bufferQueueSemaphore, maxNumber, outputBufferSize);
 		if (calcThreads[i] == NULL) {
 			error("creating new thread failed");
 			//FreeResultsObject(testFile);
@@ -106,7 +130,7 @@ int main(int argc, char** argv) {
 		}
 		calcThreads[i]->Function = CalculationThreadFunc;
 	}
-	CreateAllCalculationThreads(calcThreads, numOfComputationThreads);
+	CreateAndRunAllCalculationThreads(calcThreads, numOfComputationThreads);
 
 	debug("after running calculation threads");
 
@@ -136,16 +160,6 @@ int main(int argc, char** argv) {
 
 	debug("finished waiting to sort thread");
 
-	//DWORD exit_code = 1;
-	///* Get Exit Code */
-	//char** results = (char**)malloc(sizeof(char*) * numOfComputationThreads);
-	//for (int i = 0; i < numOfComputationThreads; i++) {
-	//	if (GetExitCodeThread(calcThreads[i]->Handle, &(calcThreads[i]->ExitCode)) == 0) {
-	//		printf("ERROR: when getting thread exit code\n");
-	//		return -1;
-	//	}
-	//}
-
 	/*if (FreeThreadArray(calcThreads, outputFilePath) != 0) {
 		printf("ERROR: when closing thread handles");
 		return -1;
@@ -155,7 +169,7 @@ int main(int argc, char** argv) {
 }
 
 
-int CreateAllCalculationThreads(Thread** allThreads, int numberOfThreads) {
+int CreateAndRunAllCalculationThreads(Thread** allThreads, int numberOfThreads) {
 	for (int i = 0; i < numberOfThreads; i++) {
 		//system call
 		allThreads[i]->Handle = CreateThread(
